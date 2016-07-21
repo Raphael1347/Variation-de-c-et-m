@@ -1,73 +1,103 @@
 clear
 clc
 close all
-
-% Frequences des mesures synthetiques
-f=logspace(-3,4,50);
+tic
+numfw=50; %nombre d'élément dans le vecteur de fréquence
+f=logspace(-3,4,numfw);
 w=f.*(2*pi); % frequences angulaires associees
 t=logspace(floor(log10(min(1./w))-1), ceil(log10(max(1./w))+1), 1000).';
 % Parametres pour la modelisation ColeCole
 % Modifier la fonction ColeCole pour prendre les arguments sous cette forme
 Zo = 1000;
-tau = [10.^-2, 10.^-5];
 
-n=10; %nombre de parm�tre c et m � essayer
-mv=linspace(0.1,1,n);
-cv=linspace(0.1,1,n);
+n=30; %nombre de parmètre c et m à essayer
 
-for i=1:n;
-    
-    m = [mv(i),1];
-    
-    for j=1:n;
-        
-        c = [cv(j), 1];
-        
-        
-        % Aller chercher Z (complexe) de la fonction ColeCole
-        % Il serait bien que la fonction ColeCole prenne comme arguments:
-        % w, Z0, m, c, tau
-        Z = ColeCole(Zo,m,c,tau,w);
-        
-        
-        
-        
-        
-        [ mk,Zinv] = DecDebyeEtZinv( Z,t,w,Zo );
-        
-        mtot(i,j)=sum(mk);
-        MeanTau(i,j)=exp(sum(mk.*log(t))./sum(mk));
-        
-        for pos=1:numel(mk)-1
-            mku(pos+1)=mk(pos)+mk(pos+1);
-        end
-        
-        mku=mku./mku(end);
-        Tau60=t(find(mku>=0.6,1,'first'));
-        Tau10=t(find(mku>=0.1,1,'first'));
-        
-        Ut(i,j)=Tau60/Tau10;
-        
-        RMSE(i,j) = sqrt(mean(abs(Z-Zinv)).^2);
-        
+tau1 = ones(n,1)*10.^-2;
+tau2 = ones(n,1)*10.^-5;
+tau=[tau1 ; tau2];%pour avoir un vecteur colone contenant Tau1 suivie de Tau2
+
+m1(1,1,:)=linspace(0.1,1,n);
+m2=ones(1,1,n);
+
+m=repmat(m1,n,numfw);
+m=[m ; repmat(m2,n,numfw)];%pour avoir un vecteur dans la dimantion 3
+%(profondeur) contenant m1 et m2 et répété ce
+%ce vecteur pour avoir une matrice 3d de la même
+%hauteur que c et de la même largeur que w
+%[- - m]
+
+c1(:,1)=linspace(0.1,1,n);
+c2=ones(n,1);
+c=[c1;c2]*ones(1,numfw); %pour avoir un vecteur colone contenant
+%c1 suivie de c2 et répété cette colonne
+%pour avoir une matrice de même largeur que w
+
+
+% Aller chercher Z (complexe) de la fonction ColeCole
+% Il serait bien que la fonction ColeCole prenne comme arguments:
+% w, Z0, m, c, tau
+
+
+Z = ColeCole(Zo,m,c,tau,w,n);
+
+clear a1 a2 a3 P1 P2
+
+
+
+[ mk,Zinv] = DecDebyeEtZinv( Z,t,w,Zo,n,numfw);
+
+
+lnt=repmat(log(t)*ones(1,n),[1 1 n]); %créer un matrice de ln(t) de même taille que
+%la matrice mk où chaque colonne est identique
+
+MeanTau=exp(sum(mk.*lnt,1)./sum(mk,1));
+
+[rowmk,colmk]=size(mk);
+mkU=mk;
+
+
+for row=1:rowmk-1;
+    mkU(row+1,:,:)=mkU(row,:,:)+mkU(row+1,:,:);
+end
+
+
+mkUmax=repmat(mkU(end,:,:),[rowmk 1 1]);
+mkU=mkU./mkUmax;
+
+
+for prof=1:n
+    for col=1:n
+        Tau60(1,col,prof)=t(find(mkU(:,col,prof)>=0.6,1,'first'));
+        Tau10(1,col,prof)=t(find(mkU(:,col,prof)>=0.1,1,'first'));
+    end
+end
+Ut=Tau60./Tau10;
+
+
+Z=permute(Z,[2 1 3]); %[w c m]
+
+RMSE = permute(sqrt(mean(abs(Z-Zinv).^2,1)),[2 3 1]);
+
+
 %         fig=figure('name',sprintf('m=%.*f et 1, c=%.*f et 1',mv(i),cv(j)),'numbertitle','off');
-%         
+%
 %         bar(t,mk)
 %         set(gca,'XScale','log')
 %         xlabel('Tau')
 %         ylabel('mk')
-%         
-    end
-end
+%
+
 
 
 figure(1)
 
-[Mv,Cv]=meshgrid(mv,cv);
+[M1,C1]=meshgrid(m1,c1);
 
-surfc(Mv,Cv,RMSE)
+surfc(M1,C1,RMSE)
 view(2)
-
-% imagesc(cv,mv,RMSE)
-
+xlabel('c')
+ylabel('m')
+zlabel('RMSE')
+% imagesc(c1,m2,RMSE)
+toc
 
